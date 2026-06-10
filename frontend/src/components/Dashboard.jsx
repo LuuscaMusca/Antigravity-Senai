@@ -112,7 +112,7 @@ export default function Dashboard({
               const y = chartHeight - height + 15;
 
               return (
-                <g key={day.date}>
+                <g key={day.fullDate || idx}>
                   {/* Valor acima da barra */}
                   <text x={x + barWidth / 2} y={y - 4} className="chart-value">
                     {day.completed}
