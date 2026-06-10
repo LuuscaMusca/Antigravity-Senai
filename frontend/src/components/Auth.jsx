@@ -22,6 +22,12 @@ export default function Auth({ onLoginSuccess, API_URL }) {
       return;
     }
 
+    if (!isLogin && password.length < 6) {
+      setError('A senha deve conter no mínimo 6 caracteres.');
+      setLoading(false);
+      return;
+    }
+
     const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
     const payload = isLogin ? { email, password } : { name, email, password };
 
