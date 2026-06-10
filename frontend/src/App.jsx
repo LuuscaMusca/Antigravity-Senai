@@ -73,46 +73,86 @@ export default function App() {
     showAlert('Você saiu do sistema.', 'success');
   };
 
-  // Carregar dados iniciais do usuário
-  const loadUserData = async () => {
-    if (!token) return;
+  // Função auxiliar para chamadas seguras e interceptação de expiração de token
+  const authorizedFetch = async (url, options = {}) => {
+    if (!token) return null;
 
     const headers = {
       'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      ...options.headers
     };
 
     try {
+      const response = await fetch(url, { ...options, headers });
+      if (response.status === 401 || response.status === 403) {
+        // Limpar armazenamento e forçar logout
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        setToken('');
+        setUser(null);
+        setTasks([]);
+        setHabits([]);
+        setNotesContent('');
+        showAlert('Sua sessão expirou. Por favor, faça login novamente.', 'error');
+        throw new Error('Sessão expirada');
+      }
+      return response;
+    } catch (err) {
+      if (err.message === 'Sessão expirada') {
+        throw err;
+      }
+      console.error('Erro de conexão:', err);
+      throw err;
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setToken('');
+    setUser(null);
+    setTasks([]);
+    setHabits([]);
+    setNotesContent('');
+    showAlert('Você saiu do sistema.', 'success');
+  };
+
+  // Carregar dados iniciais do usuário
+  const loadUserData = async () => {
+    try {
       // 1. Carregar Tarefas
-      const tasksRes = await fetch(`${API_URL}/api/tasks`, { headers });
-      if (tasksRes.ok) {
+      const tasksRes = await authorizedFetch(`${API_URL}/api/tasks`);
+      if (tasksRes && tasksRes.ok) {
         const tasksData = await tasksRes.json();
         setTasks(tasksData);
       }
 
       // 2. Carregar Hábitos
-      const habitsRes = await fetch(`${API_URL}/api/habits`, { headers });
-      if (habitsRes.ok) {
+      const habitsRes = await authorizedFetch(`${API_URL}/api/habits`);
+      if (habitsRes && habitsRes.ok) {
         const habitsData = await habitsRes.json();
         setHabits(habitsData);
       }
 
       // 3. Carregar Notas
-      const notesRes = await fetch(`${API_URL}/api/notes`, { headers });
-      if (notesRes.ok) {
+      const notesRes = await authorizedFetch(`${API_URL}/api/notes`);
+      if (notesRes && notesRes.ok) {
         const notesData = await notesRes.json();
         setNotesContent(notesData.content || '');
       }
 
       // 4. Carregar Dados do Dashboard
-      const dashRes = await fetch(`${API_URL}/api/dashboard`, { headers });
-      if (dashRes.ok) {
+      const dashRes = await authorizedFetch(`${API_URL}/api/dashboard`);
+      if (dashRes && dashRes.ok) {
         const dashData = await dashRes.json();
         setDashboardData(dashData);
       }
     } catch (err) {
-      console.error('Erro ao carregar dados do usuário:', err);
-      showAlert('Erro ao sincronizar dados com o servidor.', 'error');
+      if (err.message !== 'Sessão expirada') {
+        console.error('Erro ao carregar dados do usuário:', err);
+        showAlert('Erro ao sincronizar dados com o servidor.', 'error');
+      }
     }
   };
 
@@ -124,79 +164,67 @@ export default function App() {
 
   // Ações de Tarefa
   const handleSaveTask = async (taskData) => {
-    const headers = {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    };
-
     try {
       if (taskData.id) {
         // Atualizar
-        const res = await fetch(`${API_URL}/api/tasks/${taskData.id}`, {
+        const res = await authorizedFetch(`${API_URL}/api/tasks/${taskData.id}`, {
           method: 'PUT',
-          headers,
           body: JSON.stringify(taskData)
         });
 
-        if (!res.ok) throw new Error('Não foi possível atualizar a tarefa.');
+        if (res && !res.ok) throw new Error('Não foi possível atualizar a tarefa.');
         showAlert('Tarefa atualizada com sucesso!');
       } else {
         // Criar
-        const res = await fetch(`${API_URL}/api/tasks`, {
+        const res = await authorizedFetch(`${API_URL}/api/tasks`, {
           method: 'POST',
-          headers,
           body: JSON.stringify(taskData)
         });
 
-        if (!res.ok) throw new Error('Não foi possível criar a tarefa.');
+        if (res && !res.ok) throw new Error('Não foi possível criar a tarefa.');
         showAlert('Tarefa criada com sucesso!');
       }
 
       // Recarregar tarefas e dados do dashboard
       loadUserData();
     } catch (err) {
-      showAlert(err.message, 'error');
+      if (err.message !== 'Sessão expirada') {
+        showAlert(err.message, 'error');
+      }
     }
   };
 
   const handleToggleComplete = async (taskId, completed) => {
-    const headers = {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    };
-
     try {
-      const res = await fetch(`${API_URL}/api/tasks/${taskId}`, {
+      const res = await authorizedFetch(`${API_URL}/api/tasks/${taskId}`, {
         method: 'PUT',
-        headers,
         body: JSON.stringify({ completed })
       });
 
-      if (!res.ok) throw new Error('Erro ao alterar status da tarefa.');
+      if (res && !res.ok) throw new Error('Erro ao alterar status da tarefa.');
       loadUserData();
     } catch (err) {
-      showAlert(err.message, 'error');
+      if (err.message !== 'Sessão expirada') {
+        showAlert(err.message, 'error');
+      }
     }
   };
 
   const handleDeleteTask = async (taskId) => {
     if (!window.confirm('Tem certeza que deseja excluir esta tarefa?')) return;
 
-    const headers = {
-      'Authorization': `Bearer ${token}`
-    };
-
     try {
-      const res = await fetch(`${API_URL}/api/tasks/${taskId}`, {
-        method: 'DELETE',
-        headers
+      const res = await authorizedFetch(`${API_URL}/api/tasks/${taskId}`, {
+        method: 'DELETE'
       });
 
-      if (!res.ok) throw new Error('Erro ao excluir tarefa.');
+      if (res && !res.ok) throw new Error('Erro ao excluir tarefa.');
       showAlert('Tarefa excluída.');
       loadUserData();
     } catch (err) {
-      showAlert(err.message, 'error');
+      if (err.message !== 'Sessão expirada') {
+        showAlert(err.message, 'error');
+      }
     }
   };
 
@@ -212,86 +240,71 @@ export default function App() {
 
   // Ações de Hábito
   const handleAddHabit = async (name) => {
-    const headers = {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    };
-
     try {
-      const res = await fetch(`${API_URL}/api/habits`, {
+      const res = await authorizedFetch(`${API_URL}/api/habits`, {
         method: 'POST',
-        headers,
         body: JSON.stringify({ name })
       });
 
-      if (!res.ok) throw new Error('Erro ao criar hábito.');
+      if (res && !res.ok) throw new Error('Erro ao criar hábito.');
       showAlert('Hábito adicionado!');
       loadUserData();
     } catch (err) {
-      showAlert(err.message, 'error');
+      if (err.message !== 'Sessão expirada') {
+        showAlert(err.message, 'error');
+      }
     }
   };
 
   const handleDeleteHabit = async (habitId) => {
     if (!window.confirm('Excluir este hábito permanentemente?')) return;
 
-    const headers = {
-      'Authorization': `Bearer ${token}`
-    };
-
     try {
-      const res = await fetch(`${API_URL}/api/habits/${habitId}`, {
-        method: 'DELETE',
-        headers
+      const res = await authorizedFetch(`${API_URL}/api/habits/${habitId}`, {
+        method: 'DELETE'
       });
 
-      if (!res.ok) throw new Error('Erro ao excluir hábito.');
+      if (res && !res.ok) throw new Error('Erro ao excluir hábito.');
       showAlert('Hábito removido.');
       loadUserData();
     } catch (err) {
-      showAlert(err.message, 'error');
+      if (err.message !== 'Sessão expirada') {
+        showAlert(err.message, 'error');
+      }
     }
   };
 
   const handleToggleHabit = async (habitId) => {
-    const headers = {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    };
-
     try {
-      const res = await fetch(`${API_URL}/api/habits/${habitId}/toggle`, {
-        method: 'POST',
-        headers
+      const res = await authorizedFetch(`${API_URL}/api/habits/${habitId}/toggle`, {
+        method: 'POST'
       });
 
-      if (!res.ok) throw new Error('Erro ao atualizar hábito.');
+      if (res && !res.ok) throw new Error('Erro ao atualizar hábito.');
       loadUserData();
     } catch (err) {
-      showAlert(err.message, 'error');
+      if (err.message !== 'Sessão expirada') {
+        showAlert(err.message, 'error');
+      }
     }
   };
 
   // Bloco de Notas
   const handleSaveNotes = async (content) => {
-    const headers = {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    };
-
     try {
-      const res = await fetch(`${API_URL}/api/notes`, {
+      const res = await authorizedFetch(`${API_URL}/api/notes`, {
         method: 'PUT',
-        headers,
         body: JSON.stringify({ content })
       });
 
-      if (!res.ok) throw new Error();
+      if (res && !res.ok) throw new Error('Erro ao salvar notas.');
       // Atualizar o estado silenciosamente
       setNotesContent(content);
     } catch (err) {
-      console.error('Erro ao salvar notas rápidas');
-      throw err;
+      if (err.message !== 'Sessão expirada') {
+        console.error('Erro ao salvar notas rápidas');
+        throw err;
+      }
     }
   };
 
