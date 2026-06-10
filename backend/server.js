@@ -6,6 +6,17 @@ require('dotenv').config();
 
 const { query } = require('./db');
 
+// Helper para obter a data local no formato YYYY-MM-DD
+function getLocalDateString(offsetDays = 0) {
+  const d = new Date();
+  if (offsetDays !== 0) {
+    d.setDate(d.getDate() + offsetDays);
+  }
+  const offset = d.getTimezoneOffset();
+  const localDate = new Date(d.getTime() - (offset * 60 * 1000));
+  return localDate.toISOString().split('T')[0];
+}
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-dev-secret-key-life-planner';
@@ -39,6 +50,10 @@ app.post('/api/auth/register', async (req, res) => {
 
   if (!name || !email || !password) {
     return res.status(400).json({ error: 'Todos os campos são obrigatórios.' });
+  }
+
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'A senha deve conter no mínimo 6 caracteres.' });
   }
 
   try {
@@ -185,7 +200,7 @@ app.put('/api/tasks/:id', authenticateToken, async (req, res) => {
     if (completed !== undefined) {
       if (completed && !existingTask.completed) {
         // Obter data local no formato YYYY-MM-DD
-        completedAt = new Date().toISOString().split('T')[0];
+        completedAt = getLocalDateString();
       } else if (!completed) {
         completedAt = null;
       }
@@ -238,7 +253,7 @@ app.delete('/api/tasks/:id', authenticateToken, async (req, res) => {
 // Listar hábitos com log para uma determinada data
 app.get('/api/habits', authenticateToken, async (req, res) => {
   const userId = req.user.id;
-  const date = req.query.date || new Date().toISOString().split('T')[0]; // Padrão YYYY-MM-DD local
+  const date = req.query.date || getLocalDateString(); // Padrão YYYY-MM-DD local
 
   try {
     const habits = await query.all(
@@ -305,7 +320,7 @@ app.delete('/api/habits/:id', authenticateToken, async (req, res) => {
 app.post('/api/habits/:id/toggle', authenticateToken, async (req, res) => {
   const userId = req.user.id;
   const habitId = req.params.id;
-  const date = req.body.date || new Date().toISOString().split('T')[0];
+  const date = req.body.date || getLocalDateString();
 
   try {
     // Validar propriedade
@@ -371,7 +386,7 @@ app.put('/api/notes', authenticateToken, async (req, res) => {
 
 app.get('/api/dashboard', authenticateToken, async (req, res) => {
   const userId = req.user.id;
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getLocalDateString();
 
   try {
     // 1. Total de tarefas ativas e concluídas
@@ -396,9 +411,7 @@ app.get('/api/dashboard', authenticateToken, async (req, res) => {
     // Gerar lista dos últimos 7 dias locais
     const last7Days = [];
     for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      last7Days.push(d.toISOString().split('T')[0]);
+      last7Days.push(getLocalDateString(-i));
     }
 
     const productivity = [];
