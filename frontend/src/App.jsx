@@ -107,17 +107,6 @@ export default function App() {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    setToken('');
-    setUser(null);
-    setTasks([]);
-    setHabits([]);
-    setNotesContent('');
-    showAlert('Você saiu do sistema.', 'success');
-  };
-
   // Carregar dados iniciais do usuário
   const loadUserData = async () => {
     try {
